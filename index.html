@@ -121,6 +121,31 @@ document.getElementById('profs').innerHTML=P.map((p,i)=>`<div class="card"><div 
 ${p.pcs.map((c,j)=>`<div class="r"><input type="number" min="1" placeholder="Longueur" value="${esc(c.l)}" oninput="P[${i}].pcs[${j}].l=this.value;save();calc()"><span>×</span><input type="number" min="1" placeholder="Qté" value="${esc(c.q)}" oninput="P[${i}].pcs[${j}].q=this.value;save();calc()"><button class="x" onclick="delPc(${i},${j})">✕</button></div>`).join('')}
 <button onclick="addPc(${i})">+ Pièce</button></div></div>`).join('');
 }
+function exact(list,L,k,maxM){
+const g={};list.forEach(x=>g[x]=(g[x]||0)+1);
+const T=Object.keys(g).map(Number).sort((a,b)=>b-a);
+if(!T.length||T.length>12)return null;
+const dem=T.map(t=>g[t]),w=T.map(t=>t+k),C=L+k;
+const tot=dem.reduce((a,d,i)=>a+d*w[i],0),LB=Math.max(1,Math.ceil(tot/C-1e-9));
+if(LB>maxM)return null;
+let nodes=0;const bad=new Set();
+function pats(dm,i){const out=[],cur=T.map(()=>0);
+(function f(j,cap){
+if(j==T.length){if(cur[i]<1)return;for(let q=0;q<T.length;q++)if(cur[q]<dm[q]&&w[q]<=cap)return;out.push(cur.slice());return}
+const mx=Math.min(dm[j],Math.floor(cap/w[j]));
+for(let c=mx;c>=(j==i?1:0);c--){cur[j]=c;f(j+1,cap-c*w[j])}
+cur[j]=0})(0,C);return out}
+function solve(dm,m){
+if(dm.every(d=>!d))return[];
+if(m<=0)return null;
+let rem=0;dm.forEach((d,q)=>rem+=d*w[q]);if(rem>m*C)return null;
+const key=dm.join()+'|'+m;if(bad.has(key))return null;
+if(++nodes>150000)throw 0;
+const i=dm.findIndex(d=>d>0);
+for(const pt of pats(dm,i)){const r=solve(dm.map((d,q)=>d-pt[q]),m-1);if(r){r.push(pt);return r}}
+bad.add(key);return null}
+try{for(let m=LB;m<=maxM;m++){const r=solve(dem,m);if(r)return r.map(pt=>{const c=[];pt.forEach((n,q)=>{for(let z=0;z<n;z++)c.push(T[q])});return{L,c,s:c.reduce((a,b)=>a+b,0)}})}}catch(e){}
+return null}
 function opt(p){
 const L=p.len.split(/[,;\s]+/).map(Number).filter(x=>x>0).sort((a,b)=>a-b),k=parseFloat(p.kerf)||0;
 const list=[];p.pcs.forEach(c=>{const l=+c.l,q=parseInt(c.q)||0;for(let n=0;n<q&&l>0;n++)list.push(l)});
@@ -129,6 +154,7 @@ for(const l of list){
 let b=bars.find(b=>b.s+l+k*(b.c.length+1)<=b.L||(b.c.length==0&&l<=b.L));
 if(!b){const Lb=L.find(x=>x>=l);if(!Lb){rej.push(l);continue}if(bars.length>=mx){miss.push(l);continue}b={L:Lb,c:[],s:0};bars.push(b)}
 b.c.push(l);b.s+=l}
+if(L.length==1&&bars.length>1&&!miss.length){const ex=exact(list.filter(l=>l<=L[0]),L[0],k,bars.length-1);if(ex&&ex.length<=mx){bars.length=0;ex.forEach(b=>bars.push(b))}}
 bars.forEach(b=>b.ch=b.L-b.s-k*(b.c.length>1?b.c.length-1:0));
 return{bars,rej,miss,k}}
 function calc(){
