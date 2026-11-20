@@ -79,7 +79,7 @@ input.cm{color:#000}
 </section>
 
 <section style="margin-top:22px">
-<div class="bar noprint"><h2>2. Fiches de débit</h2><button class="p" onclick="exportPdf()">Exporter en PDF (A4)</button></div>
+<div class="bar noprint"><h2>2. Fiches de débit</h2><label style="flex-direction:row;align-items:center;gap:8px;flex:0 0 auto;color:var(--tx);font-size:14px"><input type="checkbox" id="sw" checked onchange="setSW(this.checked)" style="width:20px"> Afficher les poids</label><button class="p" onclick="exportPdf()">Exporter en PDF (A4)</button></div>
 <div id="st" class="noprint" style="display:none;margin-bottom:12px;padding:10px 12px;border:1px solid var(--ac);border-radius:8px;background:var(--ac2)"></div>
 <div id="out"></div>
 </section>
@@ -101,10 +101,21 @@ autre:'<path d="M9 9a3 3 0 1 1 4 2.8c-1 .5-1 1.2-1 2.2M12 18v.5"/><rect x="3" y=
 const N={rond:'Rond',carre:'Carré',plat:'Plat',corniere:'Cornière',te:'Té',demi:'Demi rond',tronde:'Tube rond',tcarre:'Tube carré',trect:'Tube rectangle',autre:'Autre'};
 const svg=k=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round">${S[k]||S.autre}</svg>`;
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const MAT={acier:{n:'Acier',d:7.85},inox:{n:'Inox',d:7.9},alu:{n:'Aluminium',d:2.7},laiton:{n:'Laiton',d:8.5},sapin:{n:'Sapin / épicéa',d:0.45}};
+const DIM={rond:[['d','Ø (mm)']],carre:[['a','Côté (mm)']],plat:[['b','Largeur (mm)'],['e','Épaisseur (mm)']],corniere:[['a','Aile A (mm)'],['b','Aile B (mm)'],['e','Épaisseur (mm)']],te:[['b','Largeur (mm)'],['h','Hauteur (mm)'],['e','Épaisseur (mm)']],demi:[['d','Ø (mm)']],tronde:[['d','Ø ext. (mm)'],['e','Épaisseur (mm)']],tcarre:[['a','Côté (mm)'],['e','Épaisseur (mm)']],trect:[['a','Hauteur (mm)'],['b','Largeur (mm)'],['e','Épaisseur (mm)']],autre:[['m','Masse linéique (kg/m)']]};
+const fmt=x=>(Math.round(x*100)/100).toFixed(2).replace('.',',');
+function mlin(p){const D=p.dim||{},n=q=>parseFloat(D[q])||0,r=MAT[p.mat||'acier'].d;let A=0;
+switch(p.shape){case'rond':A=Math.PI*n('d')**2/4;break;case'carre':A=n('a')**2;break;case'plat':A=n('b')*n('e');break;
+case'corniere':A=n('e')*(n('a')+n('b')-n('e'));break;case'te':A=n('e')*(n('b')+n('h')-n('e'));break;case'demi':A=Math.PI*n('d')**2/8;break;
+case'tronde':A=Math.PI*n('e')*(n('d')-n('e'));break;case'tcarre':A=4*n('e')*(n('a')-n('e'));break;case'trect':A=2*n('e')*(n('a')+n('b')-2*n('e'));break;
+default:return n('m')}
+return Math.max(0,A)*r/1000}
+let SW=true;try{SW=localStorage.getItem('decoupe_sw')!=='0'}catch(e){}
+function setSW(v){SW=v;try{localStorage.setItem('decoupe_sw',v?'1':'0')}catch(e){}calc()}
 let P=[],uid=1;
 try{const d=JSON.parse(localStorage.getItem('decoupe')||'null');if(d){P=d.P;uid=d.uid}}catch(e){}
 function save(){try{localStorage.setItem('decoupe',JSON.stringify({P,uid}))}catch(e){}}
-function addProf(){P.push({id:uid++,name:'',shape:'rond',len:'6000',kerf:'3',qty:'',pcs:[{l:'',q:''}],n:{}});save();draw();calc()}
+function addProf(){P.push({id:uid++,name:'',shape:'rond',len:'6000',kerf:'3',qty:'',mat:'acier',dim:{},pcs:[{l:'',q:''}],n:{}});save();draw();calc()}
 function delProf(i){P.splice(i,1);save();draw();calc()}
 function addPc(i){P[i].pcs.push({l:'',q:''});save();draw()}
 function delPc(i,j){P[i].pcs.splice(j,1);save();draw();calc()}
@@ -112,11 +123,14 @@ function draw(){
 document.getElementById('profs').innerHTML=P.map((p,i)=>`<div class="card"><div class="row">
 <div class="ico" id="ic${i}">${svg(p.shape)}</div>
 <label style="flex:2 1 180px">Nom du profil<input value="${esc(p.name)}" placeholder="ex. Carré 20x20 ép. 2" oninput="P[${i}].name=this.value;save();calc()"></label>
-<label>Forme<select onchange="P[${i}].shape=this.value;document.getElementById('ic${i}').innerHTML=svg(this.value);save();calc()">${Object.keys(N).map(k=>`<option value="${k}"${k==p.shape?' selected':''}>${N[k]}</option>`).join('')}</select></label>
+<label>Forme<select onchange="P[${i}].shape=this.value;save();draw();calc()">${Object.keys(N).map(k=>`<option value="${k}"${k==p.shape?' selected':''}>${N[k]}</option>`).join('')}</select></label>
 <label>Longueur(s) des barres (mm)<input value="${esc(p.len)}" placeholder="6000 ou 6000,3000" oninput="P[${i}].len=this.value;save();calc()"></label>
 <label style="flex:0 1 120px">Largeur de coupe (mm)<input type="number" step="0.1" min="0" value="${esc(p.kerf)}" oninput="P[${i}].kerf=this.value;save();calc()"></label>
 <label style="flex:0 1 130px">Nb de barres dispo<input type="number" min="1" value="${esc(p.qty||'')}" placeholder="∞ illimité" oninput="P[${i}].qty=this.value;save();calc()"></label>
 <button class="x" onclick="delProf(${i})" title="Supprimer">✕</button></div>
+<div class="row" style="margin-top:10px"><label style="flex:0 1 220px">Matière<select onchange="P[${i}].mat=this.value;save();calc()">${Object.keys(MAT).map(k=>`<option value="${k}"${k==(p.mat||'acier')?' selected':''}>${MAT[k].n} · ${Math.round(MAT[k].d*1000)} kg/m³</option>`).join('')}</select></label>
+${(DIM[p.shape]||DIM.autre).map(([k,lab])=>`<label style="flex:0 1 130px">${lab}<input type="number" step="any" min="0" value="${esc((p.dim||{})[k]||'')}" oninput="(P[${i}].dim=P[${i}].dim||{})['${k}']=this.value;save();calc()"></label>`).join('')}
+<span class="meta" id="kg${i}" style="margin-bottom:8px"></span></div>
 <div class="pcs"><div style="font-size:12px;color:var(--mu);margin-bottom:4px">Pièces à débiter (longueur mm × quantité)</div>
 ${p.pcs.map((c,j)=>`<div class="r"><input type="number" min="1" placeholder="Longueur" value="${esc(c.l)}" oninput="P[${i}].pcs[${j}].l=this.value;save();calc()"><span>×</span><input type="number" min="1" placeholder="Qté" value="${esc(c.q)}" oninput="P[${i}].pcs[${j}].q=this.value;save();calc()"><button class="x" onclick="delPc(${i},${j})">✕</button></div>`).join('')}
 <button onclick="addPc(${i})">+ Pièce</button></div></div>`).join('');
@@ -162,14 +176,16 @@ const o=document.getElementById('out');
 if(!P.length){o.innerHTML='<p class="empty">Ajoutez un profil pour commencer.</p>';return}
 o.innerHTML=P.map((p,i)=>{
 const r=opt(p),tot=r.bars.reduce((a,b)=>a+b.L,0),ch=r.bars.reduce((a,b)=>a+b.ch,0);
+const kgm=mlin(p),W=mm=>kgm?fmt(mm/1000*kgm):'—';{const e=document.getElementById('kg'+i);if(e)e.textContent=kgm?'= '+fmt(kgm)+' kg/m':'Dimensions requises pour le poids'}
 const rows=r.bars.map((b,j)=>{const g={};b.c.forEach(x=>g[x]=(g[x]||0)+1);
 const e=Object.entries(g).sort((a,c)=>c[0]-a[0]),n=e.length,c0=Math.round(b.ch*10)/10;
 return e.map(([l,q],k)=>{const key=j+'_'+k,m=p.n[key]||{};
-return`<tr${k?'':' class="sep"'}>${k?'':`<td class="c" rowspan="${n}">${j+1}</td><td class="c" rowspan="${n}">${b.L}</td>`}<td class="c">${l}</td><td class="c">${q}</td>${k?'':`<td class="c" rowspan="${n}">${c0}</td>`}<td style="min-width:130px"><input class="cm" value="${esc(m.c||'')}" placeholder="…" oninput="nt(${i},'${key}','c',this.value)"></td><td class="c"><input type="checkbox" ${m.k?'checked':''} onchange="nt(${i},'${key}','k',this.checked)"></td></tr>`}).join('')}).join('');
+return`<tr${k?'':' class="sep"'}>${k?'':`<td class="c" rowspan="${n}">${j+1}</td><td class="c" rowspan="${n}">${b.L}</td>`}<td class="c">${l}</td><td class="c">${q}</td>${SW?`<td class="c">${W(l)}</td><td class="c">${W(l*q)}</td>`:''}${k?'':`<td class="c" rowspan="${n}">${c0}</td>`}<td style="min-width:130px"><input class="cm" value="${esc(m.c||'')}" placeholder="…" oninput="nt(${i},'${key}','c',this.value)"></td><td class="c"><input type="checkbox" ${m.k?'checked':''} onchange="nt(${i},'${key}','k',this.checked)"></td></tr>`}).join('')}).join('');
 return`<div class="fiche card"><h3><span class="ico">${svg(p.shape)}</span>${esc(p.name||'Profil sans nom')} <span style="font-weight:400;color:var(--mu);font-size:13px">(${N[p.shape]})</span></h3>
 <div class="meta">Coupe : ${p.kerf||0} mm · ${r.bars.length} barre(s) utilisée(s) · Barres dispo : ${p.qty?esc(p.qty):'∞'} · Chutes : ${tot?Math.round(ch/tot*1000)/10:0} %</div>
+<div class="meta">Matière : ${MAT[p.mat||'acier'].n}${kgm&&SW?` · ${fmt(kgm)} kg/m · Poids des pièces : ${W(r.bars.reduce((a,b)=>a+b.s,0))} kg · Barres : ${W(tot)} kg · Chutes : ${W(ch)} kg`:SW&&!kgm?' · renseignez les dimensions pour obtenir les poids':''}</div>
 ${r.miss.length?`<div class="meta" style="color:#b91c1c">Stock de barres insuffisant : ${r.miss.length} pièce(s) non placée(s) (${[...new Set(r.miss)].join(', ')} mm)</div>`:''}${r.rej.length?`<div class="meta" style="color:#b91c1c">Pièce(s) plus longue(s) que les barres : ${[...new Set(r.rej)].join(', ')} mm</div>`:''}
-${r.bars.length?`<div class="tw"><table><thead><tr><th>Barre</th><th>Barre d'origine (mm)</th><th>Longueur (mm)</th><th>Qté</th><th>Chute</th><th>Commentaire</th><th>✔</th></tr></thead><tbody>${rows}</tbody></table></div>`:'<p class="empty">Aucune pièce saisie.</p>'}</div>`}).join('')}
+${r.bars.length?`<div class="tw"><table><thead><tr><th>Barre</th><th>Barre d'origine (mm)</th><th>Longueur (mm)</th><th>Qté</th>${SW?'<th>Poids unit. (kg)</th><th>Poids ligne (kg)</th>':''}<th>Chute</th><th>Commentaire</th><th>✔</th></tr></thead><tbody>${rows}</tbody></table></div>`:'<p class="empty">Aucune pièce saisie.</p>'}</div>`}).join('')}
 
 function pdfIcon(d,k,x,y){
 const poly=p=>d.lines(p.slice(1).map((q,i)=>[q[0]-p[i][0],q[1]-p[i][1]]),p[0][0],p[0][1],[1,1],'S',true);
@@ -198,30 +214,32 @@ d.setFont('helvetica','normal');d.setFontSize(9);d.text(new Date().toLocaleDateS
 let y=26;
 P.forEach(p=>{
 const r=opt(p),tot=r.bars.reduce((a,b)=>a+b.L,0),ch=r.bars.reduce((a,b)=>a+b.ch,0);
+const kgm=mlin(p),W=mm=>kgm?fmt(mm/1000*kgm):'-';
 if(y>235){d.addPage();y=14}
 pdfIcon(d,p.shape,12,y-5);
 d.setFont('helvetica','bold');d.setFontSize(12);d.text((p.name||'Profil sans nom')+'  ('+N[p.shape]+')',24,y);
 d.setFont('helvetica','normal');d.setFontSize(9);
 d.text('Coupe : '+(p.kerf||0)+' mm  -  '+r.bars.length+' barre(s)  -  Dispo : '+(p.qty||'illimité')+'  -  Chutes : '+(tot?Math.round(ch/tot*1000)/10:0)+' %',24,y+5);
+d.text('Matière : '+MAT[p.mat||'acier'].n+(kgm&&SW?'  -  '+fmt(kgm)+' kg/m  -  Poids pièces : '+W(r.bars.reduce((a,b)=>a+b.s,0))+' kg  -  Barres : '+W(tot)+' kg  -  Chutes : '+W(ch)+' kg':''),24,y+10);
 const body=[],keys=[],C={halign:'center'};
 r.bars.forEach((b,j)=>{const g={};b.c.forEach(x=>g[x]=(g[x]||0)+1);
 const e=Object.entries(g).sort((a,c)=>c[0]-a[0]),n=e.length;
 e.forEach(([l,q],k)=>{const key=j+'_'+k;keys.push(key);const row=[];
 if(!k)row.push({content:String(j+1),rowSpan:n,styles:C},{content:String(b.L),rowSpan:n,styles:C});
-row.push({content:String(l),styles:C},{content:String(q),styles:C});
+row.push({content:String(l),styles:C},{content:String(q),styles:C},...(SW?[{content:W(l),styles:C},{content:W(l*q),styles:C}]:[]));
 if(!k)row.push({content:String(Math.round(b.ch*10)/10),rowSpan:n,styles:C});
 row.push((p.n[key]||{}).c||'','');body.push(row)})});
-d.autoTable({startY:y+8,margin:{left:12,right:12},head:[['Barre',"Barre d'origine (mm)",'Longueur (mm)','Qté','Chute','Commentaire','']],body,theme:'grid',
+d.autoTable({startY:y+14,margin:{left:12,right:12},head:[['Barre',"Barre d'origine (mm)",'Longueur (mm)','Qté',...(SW?['Poids unit. (kg)','Poids ligne (kg)']:[]),'Chute','Commentaire','']],body,theme:'grid',
 styles:{fontSize:9,cellPadding:1.8,textColor:0,lineColor:[120,120,120],lineWidth:.2,minCellHeight:8,valign:'middle'},
 headStyles:{fillColor:[235,235,235],textColor:0,halign:'center'},
-columnStyles:{0:{cellWidth:14},1:{cellWidth:26},2:{cellWidth:24},3:{cellWidth:14},4:{cellWidth:16},5:{cellWidth:'auto'},6:{cellWidth:12}},
-didDrawCell:h=>{if(h.section=='body'&&h.column.index==6){const c=h.cell,z=4.5,cx=c.x+c.width/2,cy=c.y+c.height/2;d.setDrawColor(0);d.setLineWidth(.3);d.rect(cx-z/2,cy-z/2,z,z);
+columnStyles:SW?{0:{cellWidth:12},1:{cellWidth:22},2:{cellWidth:20},3:{cellWidth:11},4:{cellWidth:17},5:{cellWidth:17},6:{cellWidth:15},7:{cellWidth:'auto'},8:{cellWidth:11}}:{0:{cellWidth:12},1:{cellWidth:24},2:{cellWidth:22},3:{cellWidth:12},4:{cellWidth:17},5:{cellWidth:'auto'},6:{cellWidth:11}},
+didDrawCell:h=>{if(h.section=='body'&&h.column.index==(SW?8:6)){const c=h.cell,z=4.5,cx=c.x+c.width/2,cy=c.y+c.height/2;d.setDrawColor(0);d.setLineWidth(.3);d.rect(cx-z/2,cy-z/2,z,z);
 if((p.n[keys[h.row.index]]||{}).k){d.line(cx-1.5,cy,cx-.4,cy+1.4);d.line(cx-.4,cy+1.4,cx+1.6,cy-1.6)}}}});
 y=d.lastAutoTable.finalY+12});
 try{if(dl)await dl.save({filename:'fiche-de-debit.pdf',data:d.output('arraybuffer')});else d.save('fiche-de-debit.pdf');st('PDF enregistré.')}catch(e){st(e&&e.code=='declined'?'Enregistrement annulé.':'Erreur de téléchargement : '+((e&&(e.message||e.code))||e))}}
 function nt(i,j,f,v){(P[i].n[j]=P[i].n[j]||{})[f]=v;save()}
-if(!P.length)P.push({id:uid++,name:'Tube carré 30x30x2',shape:'tcarre',len:'6000',kerf:'3',pcs:[{l:'1450',q:'4'},{l:'820',q:'6'}],n:{}});
-draw();calc();
+if(!P.length)P.push({id:uid++,name:'Tube carré 30x30x2',shape:'tcarre',len:'6000',kerf:'3',mat:'acier',dim:{a:'30',e:'2'},pcs:[{l:'1450',q:'4'},{l:'820',q:'6'}],n:{}});
+document.getElementById('sw').checked=SW;draw();calc();
 </script>
 </body>
 </html>
